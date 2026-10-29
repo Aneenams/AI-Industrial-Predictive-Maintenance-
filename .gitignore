@@ -1,5 +1,15 @@
+# Python & Django
 venv/
 __pycache__/
 *.pyc
-.vscode/
+predictive_dashboard/db.sqlite3
+
+# Node & React
+frontend/node_modules/
+frontend/dist/
 .env
+
+# OS & Editor
+.vscode/
+.DS_Store
+Thumbs.db
