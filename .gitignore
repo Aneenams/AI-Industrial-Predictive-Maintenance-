@@ -13,3 +13,9 @@ frontend/dist/
 .vscode/
 .DS_Store
 Thumbs.db
+
+
+db.sqlite3
+
+*.csv
+*.pkl

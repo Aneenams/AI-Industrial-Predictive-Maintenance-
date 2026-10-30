@@ -11,5 +11,8 @@ class VibrationLog(models.Model):
     dominant_freq = models.FloatField(null=True, blank=True)
     peak_amplitude = models.FloatField(null=True, blank=True)
 
+    temperature = models.FloatField(null=True, blank=True)
+    current = models.FloatField(null=True, blank=True)
+
     def __str__(self):
         return f"{self.timestamp.strftime('%Y-%m-%d %H:%M:%S')} - {self.machine_status}"

@@ -23,12 +23,18 @@ class Command(BaseCommand):
         def on_message(client, userdata, msg):
             try:
                 line = msg.payload.decode('utf-8')
+                # print(f"RAW INCOMING DATA: {line}")  # <-- ADD THIS LINE
+                parts = line.split(',')
                 parts = line.split(',')
                 
-                if len(parts) == 3:
+                if len(parts) == 5:
                     x_val = float(parts[0].replace('X:', ''))
                     y_val = float(parts[1].replace('Y:', ''))
                     z_val = float(parts[2].replace('Z:', ''))
+                    temp_val = float(parts[3].replace('Temp:', ''))
+                    current_val = float(parts[4].replace('Current:', ''))
+
+                    print(f"Caught Simulated Temp: {temp_val}C | Current: {current_val}A")
                     
                     # Add to rolling window
                     x_buffer.append(x_val)
@@ -48,6 +54,12 @@ class Command(BaseCommand):
                         features = np.array([[np.mean(fft_values), np.std(fft_values)]])
                         prediction = model.predict(features) 
                         status = 'HEALTHY' if prediction[0] == 0 else 'FAULTY'
+
+                        if status == 'FAULTY':
+                            client.publish('machine/alarms', 'SHUTDOWN')
+                            self.stdout.write("🚨 FAULT DETECTED: Published SHUTDOWN command to MQTT 🚨")
+                        # else:
+                        #     self.stdout.write("✅ Machine is HEALTHY: No action required")    
                         
                         # Save the latest reading to the database with the FFT-based prediction
                         VibrationLog.objects.create(
@@ -56,7 +68,9 @@ class Command(BaseCommand):
                             z_axis=z_val,
                             dominant_freq=float(dominant_freq),
                             peak_amplitude=float(peak_amplitude),
-                            machine_status=status
+                            machine_status=status,
+                            temperature=temp_val, 
+                            current=current_val
                         )
                         
                         self.stdout.write(f"Logged to Database: {status}")
