@@ -58,8 +58,9 @@ class Command(BaseCommand):
                         if status == 'FAULTY':
                             client.publish('machine/alarms', 'SHUTDOWN')
                             self.stdout.write("🚨 FAULT DETECTED: Published SHUTDOWN command to MQTT 🚨")
-                        # else:
-                        #     self.stdout.write("✅ Machine is HEALTHY: No action required")    
+                        else:
+                            client.publish('machine/alarms', 'NORMAL')
+                            self.stdout.write("✅ SYSTEM HEALTHY: Published NORMAL command to MQTT ✅")    
                         
                         # Save the latest reading to the database with the FFT-based prediction
                         VibrationLog.objects.create(
