@@ -1,99 +1,84 @@
-#include <WiFi.h>
-#include <PubSubClient.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_ADXL345_U.h>
-
-// --- UPDATE THESE THREE LINES ---
-const char* ssid = "moto";
-const char* password = "pass12345";
-const char* mqtt_server = "10.122.197.108"; // e.g., "192.168.1.15"
+#include "model.h"
 
 const int LED_PIN = 4;
-WiFiClient espClient;
-PubSubClient client(espClient);
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
+Eloquent::ML::Port::RandomForest classifier; 
 
-void setup_wifi() {
-  delay(10);
-  Serial.print("Connecting to WiFi: ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi connected successfully!");
-}
+unsigned long lastFaultTime = 0;
+bool faultActive = false;
 
-void reconnect() {
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    if (client.connect("ESP32_Predictive_Node")) {
-      Serial.println("Connected to Broker!");
-      client.subscribe("machine/alarms");
-    } else {
-      Serial.print("Failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" Retrying in 5 seconds...");
-      delay(5000);
-    }
-  }
-}
-void callback(char* topic, byte* payload, unsigned int length) {
-  String message = "";
-  for (int i = 0; i < length; i++) {
-    message += (char)payload[i];
-  }
-  
-  if (String(topic) == "machine/alarms") {
-    if (message == "SHUTDOWN") {
-      digitalWrite(LED_PIN, HIGH); // Turn LED ON
-      Serial.println("🚨 FAULT DETECTED: LED ON");
-    } 
-    else if (message == "NORMAL") {
-      digitalWrite(LED_PIN, LOW); // Turn LED OFF
-      Serial.println("✅ SYSTEM HEALTHY: LED OFF");
-    }
-  }
-}
 void setup() {
   pinMode(LED_PIN, OUTPUT);
   Serial.begin(115200);
+  
   if(!accel.begin()) {
-    Serial.println("No ADXL345 sensor detected.");
+    Serial.println("No ADXL345 sensor detected. Check wiring!");
     while(1);
   }
-  setup_wifi();
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback); 
+  Serial.println("Offline AI Node Booted Successfully!");
 }
 
 void loop() {
-  if (!client.connected()) {
-    reconnect();
-  }
-  client.loop();
-
   sensors_event_t event; 
-  accel.getEvent(&event);
+  
+  // 1. Safely check if the sensor is responding
+  if (!accel.getEvent(&event)) {
+    Serial.println("Sensor read failed, retrying...");
+    delay(500);
+    return;
+  }
 
-  float sim_temp = 40.0 + ((float)random(0, 50) / 10.0); 
-  float sim_current = 10.0 + ((float)random(0, 20) / 10.0);
+  float sim_temp = 40.0; 
+  float sim_current = 10.0;
+  float dynamic_z = event.acceleration.z - 9.81;
 
-  // Format exactly like the old serial data: X:val,Y:val,Z:val
-// Subtract gravity (9.81) so a flat sensor outputs ~0
-float dynamic_z = event.acceleration.z - 9.81;
+  // 2. Deadzone filter: Ignore tiny resting jitters to prevent false faults
+  if (abs(event.acceleration.x) < 0.15 && abs(event.acceleration.y) < 0.15 && abs(dynamic_z) < 0.15) {
+    if (!faultActive) {
+      digitalWrite(LED_PIN, LOW); // Ensure LED stays off when resting
+    }
+    delay(100);
+    return; // Skip AI prediction when resting quietly
+  }
 
-String payload = "X:" + String(event.acceleration.x) + 
-                 ",Y:" + String(event.acceleration.y) + 
-                 ",Z:" + String(dynamic_z) +
-                 ",Temp:" + String(sim_temp) +
-                 ",Current:" + String(sim_current);
+  // 3. Pack features WITH the required 15.0 scaling factor for the model
+  float features[5] = {
+    event.acceleration.x * 15.0, 
+    event.acceleration.y * 15.0, 
+    dynamic_z * 15.0, 
+    sim_temp, 
+    sim_current
+  };
+  
+  // 4. Run the TinyML prediction locally
+  int prediction = classifier.predict(features);
 
-                
-  // Broadcast the data to the "sensor/vibration" topic
-  client.publish("sensor/vibration", payload.c_str());
+  // Print live data to Serial Monitor for debugging
+  Serial.print("X: "); Serial.print(event.acceleration.x);
+  Serial.print(" | Y: "); Serial.print(event.acceleration.y);
+  Serial.print(" | Pred: "); Serial.println(prediction);
+
+  // 5. Timer logic for the 2-second LED hold
+  if (prediction == 1) { 
+    lastFaultTime = millis(); 
+    faultActive = true;       
+    Serial.println("🚨 FAULT TRIGGERED");
+  }
+
+  // Clear the fault state after 2 seconds of no new faults
+  if (faultActive && (millis() - lastFaultTime >= 2000)) {
+    faultActive = false; 
+  }
+
+  // 6. Trigger physical LED based on AI state
+  if (faultActive) { 
+    digitalWrite(LED_PIN, HIGH);
+  } else {
+    digitalWrite(LED_PIN, LOW);
+  }
   
   delay(100);
 }
