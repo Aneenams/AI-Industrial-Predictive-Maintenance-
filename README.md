@@ -13,10 +13,11 @@ This project evolved from a Wi-Fi/MQTT connected web dashboard into a **100% off
 
 ## 📁 Repository Structure
 
-* `/ESP32_Offline_Node/` - The final C++ Arduino sketch and `model.h` for standalone hardware deployment.
+* `/ESP32_Offline_Node/` - The final C++ Arduino sketch for standalone, air-gapped hardware deployment.
+* `/ESP32_WiFi_MQTT_Node/` - Connected Arduino sketch for transmitting live telemetry to the Django backend.
 * `/predictive_dashboard/` - Django backend for receiving MQTT telemetry and serving the API.
 * `/frontend/` - React + Vite web application for real-time data visualization.
-* `train_model.py` & `collect_data.py` - Python pipeline for generating the `.pkl` model from accelerometer data.
+* `train_model.py` & `collect_data.py` - Python pipeline for generating the ML model.
 
 ## 🛠️ Hardware Requirements
 
@@ -33,11 +34,12 @@ This project evolved from a Wi-Fi/MQTT connected web dashboard into a **100% off
 
 ## 💻 Running the Project
 
-### Phase 1: Deploying the Edge Node (Standalone)
-1. Open the `/ESP32_Offline_Node/` folder in the Arduino IDE.
-2. Connect the ESP32 and ADXL345 via I2C.
-3. Flash the `.ino` sketch to the board. 
-4. Power the board via a USB battery bank; the system will actively monitor vibrations offline.
+### Phase 1: Deploying the Edge Node
+
+1. Wire the ESP32, ADXL345 sensor, and LED according to the Hardware Requirements.
+2. Open the Arduino IDE and install the required libraries (`Adafruit_ADXL345`, `EloquentTinyML`, and `PubSubClient`).
+3. **For Offline Mode:** Open the sketch inside `/ESP32_Offline_Node/`, flash it to the board, and power it via a portable USB bank.
+4. **For Web Dashboard Mode:** Open the sketch inside `/ESP32_WiFi_MQTT_Node/`. Enter your Wi-Fi credentials and local MQTT IP address in the code, then flash it to the board. *(Note: You must also complete Phase 3 below to view the live web dashboard).*
 
 ### Phase 2: Running the ML Training Pipeline
 1. Install dependencies: `pip install scikit-learn pandas numpy micromlgen`
